@@ -1,5 +1,15 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Project Structure
+
+This project is a hybrid Next.js application with an integrated AI simulation component.
+
+- **`app/`**: Contains the Next.js app router files, including the main page layout and UI components.
+- **`lib/`**: Contains utility functions and client libraries, such as the Supabase client for data persistence.
+- **`boardroom-ai/`**: A dedicated directory for the AI simulation logic, including Python scripts for running episodes and defining AI agents like "Lord Silicon."
+- **`public/`**: Static assets for the web application.
+- **`next.config.ts` & `tsconfig.json`**: Configuration files for Next.js and TypeScript.
+
 ## Getting Started
 
 First, run the development server:
