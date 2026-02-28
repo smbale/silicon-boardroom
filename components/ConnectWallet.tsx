@@ -56,9 +56,14 @@ export function ConnectWallet() {
     )
   }
 
+  // Filter unique connectors by name to avoid duplicate "MetaMask" buttons
+  const uniqueConnectors = connectors.filter((connector, index, self) =>
+    index === self.findIndex((c) => c.name === connector.name)
+  );
+
   return (
     <div className="flex flex-col gap-2">
-      {connectors.map((connector) => (
+      {uniqueConnectors.map((connector) => (
         <button
           key={connector.uid}
           onClick={() => connect({ connector })}
@@ -71,7 +76,7 @@ export function ConnectWallet() {
               Connecting...
             </span>
           ) : (
-            `Connect Wallet`
+            `Connect ${connector.name}`
           )}
         </button>
       ))}

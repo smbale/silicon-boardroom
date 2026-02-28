@@ -186,7 +186,7 @@ export default function SpectatorDashboard() {
                 {dbStatus === 'connected' ? 'Live Feed' : dbStatus === 'loading' ? 'Syncing...' : 'DB Error'}
               </span>
             </div>
-            <p className="text-slate-500 text-xs font-medium">EST. 2024 // ALPHA ACCESS</p>
+            <p className="text-slate-500 text-xs font-medium">EST. 2026 // ALPHA ACCESS</p>
           </div>
         </div>
 
