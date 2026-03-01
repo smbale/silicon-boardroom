@@ -1,0 +1,17 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'build',
+      '--build-arg', 'NEXT_PUBLIC_SUPABASE_URL=$_SUPABASE_URL',
+      '--build-arg', 'NEXT_PUBLIC_SUPABASE_ANON_KEY=$_SUPABASE_ANON_KEY',
+      '-t', 'gcr.io/$PROJECT_ID/silicon-boardroom',
+      '.'
+    ]
+
+# Push the image to Container Registry
+images:
+  - 'gcr.io/$PROJECT_ID/silicon-boardroom'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

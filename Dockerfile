@@ -5,14 +5,14 @@ WORKDIR /app
 
 # Copy package files
 COPY package.json package-lock.json* ./
-
-# Install dependencies - using install instead of ci for better compatibility in some environments
 RUN npm install
 
 # Stage 2: Build the application
 FROM node:20-alpine AS builder
 WORKDIR /app
+# First, copy the node_modules from the deps stage
 COPY --from=deps /app/node_modules ./node_modules
+# Then copy the rest of the source code
 COPY . .
 
 # Set build-time environment variables
@@ -51,5 +51,4 @@ USER nextjs
 EXPOSE 3000
 ENV PORT 3000
 
-# server.js is created by next build from the standalone output
 CMD ["node", "server.js"]
