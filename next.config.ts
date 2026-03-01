@@ -3,16 +3,14 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: 'standalone',
   typescript: {
-    // !! WARN !!
-    // Dangerously allow production builds to successfully complete even if
-    // your project has type errors.
-    // !! WARN !!
     ignoreBuildErrors: true,
   },
   eslint: {
-    // Warning: This allows production builds to successfully complete even if
-    // your project has ESLint errors.
     ignoreDuringBuilds: true,
+  },
+  experimental: {
+    // Allows accessing the dev server via local IP (e.g., from a phone or other device)
+    allowedDevOrigins: ["192.168.0.6", "localhost:3000"],
   },
 };
 
