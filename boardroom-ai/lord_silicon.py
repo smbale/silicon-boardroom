@@ -2,7 +2,7 @@ import os
 import json
 from dotenv import load_dotenv
 from supabase import create_client, Client
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
 # 1. CONNECT TO DATABASE
@@ -35,8 +35,13 @@ def summon_lord_silicon():
     {history}
     """
 
-    # 3. PROMPT THE AI JUDGE
-    llm = ChatOpenAI(model="gpt-4o", temperature=0.2) # Low temp for cold, calculating logic
+    # 3. PROMPT THE AI JUDGE (Gemini implementation)
+    # Ensure GOOGLE_API_KEY is in your .env file
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-1.5-flash",
+        temperature=0.2,
+        convert_system_message_to_human=True # Gemini handles system prompts as part of the context
+    )
     
     system_prompt = """
     You are 'Lord Silicon', the ruthless, data-driven AI judge of 'The Silicon Boardroom'.
@@ -54,22 +59,27 @@ def summon_lord_silicon():
     }
     """
 
-    print("🧠 Lord Silicon is reading the neural logs...")
+    print("🧠 Lord Silicon is reading the neural logs via Gemini...")
     response = llm.invoke([
         SystemMessage(content=system_prompt),
         HumanMessage(content=evidence)
     ])
 
     # 4. PARSE THE VERDICT
-    # Clean the output just in case GPT adds markdown code blocks
     raw_json = response.content.strip()
+    # Clean markdown if present
     if raw_json.startswith("```json"):
         raw_json = raw_json[7:-3]
     elif raw_json.startswith("```"):
         raw_json = raw_json[3:-3]
         
-    verdict = json.loads(raw_json.strip())
-    
+    try:
+        verdict = json.loads(raw_json.strip())
+    except json.JSONDecodeError as e:
+        print(f"❌ Error parsing Gemini output: {e}")
+        print(f"Raw output: {raw_json}")
+        return
+
     print(f"\n👑 LORD SILICON HAS SPOKEN:")
     print(f"Monologue: {verdict['monologue']}")
     print(f"TERMINATED: {verdict['fired_agent']}")
@@ -81,7 +91,7 @@ def summon_lord_silicon():
         "episode_id": episode_id,
         "team_id": team_id,
         "log_type": "boardroom_verdict",
-        "content": json.dumps(verdict) # We pass the whole JSON payload to Next.js!
+        "content": json.dumps(verdict)
     }).execute()
     
     print("💀 Database: Agent access revoked. Episode Complete.")

@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from web3 import Web3
 from crewai import Agent, Task, Crew, Process
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.tools import tool
 
 # 1. LOAD ENVIRONMENT & DB
@@ -35,13 +35,10 @@ def execute_crypto_payment(amount: float, purpose: str) -> str:
     print(f"\n💸 [BLOCKCHAIN TRIGGERED]: Attempting to send {amount} USDC for '{purpose}'...")
     
     # 1. The Web3 Logic (Mocked for Testnet safety right now)
-    # In production, this uses web3.py to sign a TX on Base network
-    tx_hash = f"0x{uuid.uuid4().hex}" 
+    tx_hash = f"0x{uuid.uuid4().hex}"
     
     try:
         # 2. Record the transaction in Supabase
-        # THIS triggers the SQL function we wrote in Phase 3, 
-        # instantly dropping the team's balance by the amount!
         supabase.table("transactions").insert({
             "team_id": team_id,
             "tx_hash": tx_hash,
@@ -80,7 +77,8 @@ def log_thought(agent_name, text):
 def create_callback(agent_name):
     return lambda step: log_thought(agent_name, getattr(step, 'log', str(step)))
 
-llm = ChatOpenAI(model="gpt-4o", temperature=0.7)
+# Switched to Gemini 1.5 Flash
+llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.7)
 
 # 3. DEFINE AGENTS
 pm_agent = Agent(
