@@ -5,6 +5,7 @@ WORKDIR /app
 
 # Copy package files
 COPY package.json package-lock.json* ./
+# Standard npm install to ensure all deps are present
 RUN npm install
 
 # Stage 2: Build the application
@@ -20,6 +21,7 @@ ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 ENV NEXT_TELEMETRY_DISABLED 1
 
+# Execute the build
 RUN npm run build
 
 # Stage 3: Production runner
@@ -32,11 +34,8 @@ ENV NEXT_TELEMETRY_DISABLED 1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copy public folder and static assets
+# Copy essential files for standalone mode
 COPY --from=builder /app/public ./public
-
-# Standard Next.js standalone output handling
-# This contains ONLY the files needed for production
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
@@ -44,7 +43,6 @@ USER nextjs
 
 EXPOSE 3000
 ENV PORT 3000
-# Ensure Cloud Run can bind to the correct interface
 ENV HOSTNAME "0.0.0.0"
 
 CMD ["node", "server.js"]
