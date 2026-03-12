@@ -3,12 +3,8 @@ FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Copy package files separately to leverage Docker cache
-COPY package.json ./
-# Only copy package-lock.json if it exists (using a more IDE-friendly approach)
-COPY package-lock.json* ./
-
-# Standard npm install
+# Copy package files
+COPY package.json package-lock.json* ./
 RUN npm install
 
 # Stage 2: Build the application

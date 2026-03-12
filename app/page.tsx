@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Terminal, DollarSign, Clock, Users, Gavel, AlertOctagon, Wallet, TrendingUp } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { ConnectWallet } from '@/components/ConnectWallet';
@@ -14,6 +14,7 @@ interface AgentLog {
   id?: string | number;
   log_type?: string;
   content?: string;
+  created_at?: string;
   [key: string]: unknown;
 }
 
@@ -30,11 +31,20 @@ export default function SpectatorDashboard() {
   const [verdict, setVerdict] = useState<Verdict | null>(null);
   const [dbStatus, setDbStatus] = useState<'connected' | 'error' | 'loading'>('loading');
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+
   const { address, isConnected } = useAccount();
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Auto-scroll to bottom of logs
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [chatFeed]);
 
   // READ WFLR BALANCE
   const { data: wflrBalance } = useReadContract({
@@ -48,7 +58,7 @@ export default function SpectatorDashboard() {
     },
   });
 
-  // READ FTSO PRICES (Explicitly target Flare Mainnet Chain ID 14)
+  // READ FTSO PRICES
   const { data: flrPriceData } = useReadContract({
     address: FTSO_REGISTRY_ADDRESS,
     abi: FTSO_REGISTRY_ABI,
@@ -99,11 +109,11 @@ export default function SpectatorDashboard() {
       try {
         setDbStatus('loading');
 
-        // Fetch Logs
+        // Fetch latest 50 logs for the current session
         const { data: logs, error: logsError } = await supabase
           .from('agent_logs')
           .select('*')
-          .order('created_at', { ascending: true })
+          .order('created_at', { ascending: false })
           .limit(50);
 
         if (logsError) {
@@ -111,7 +121,20 @@ export default function SpectatorDashboard() {
           setDbStatus('error');
           return;
         }
-        if (logs) setChatFeed(logs);
+
+        if (logs) {
+          // Check if there's a verdict in the initial fetch
+          const latestVerdictLog = logs.find(l => l.log_type === 'boardroom_verdict');
+          if (latestVerdictLog) {
+            try {
+              setVerdict(JSON.parse(latestVerdictLog.content || "{}"));
+            } catch (e) {
+              console.error("Initial verdict parse error:", e);
+            }
+          }
+          // Filter out verdicts from the text feed and reverse to chronological
+          setChatFeed(logs.filter(l => l.log_type !== 'boardroom_verdict').reverse());
+        }
 
         // Fetch Team Balance
         const { data: team, error: teamError } = await supabase
@@ -135,21 +158,29 @@ export default function SpectatorDashboard() {
     };
     fetchData();
 
-    // Real-time Subscriptions
+    // Real-time Subscriptions - Ensure 'agent_logs' has Realtime enabled in Supabase!
     const logChannel = supabase.channel('live-logs')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'agent_logs' }, (payload: { new: Record<string, unknown> }) => {
-        const newLog = payload.new as unknown as AgentLog;
-        if (newLog.log_type === 'boardroom_verdict') {
-          try {
-            const parsedVerdict = JSON.parse(newLog.content || "{}");
-            setVerdict(parsedVerdict);
-          } catch (e) {
-            console.error("Failed to parse boardroom verdict JSON:", e);
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'agent_logs' },
+        (payload: { new: Record<string, unknown> }) => {
+          const newLog = payload.new as unknown as AgentLog;
+
+          if (newLog.log_type === 'boardroom_verdict') {
+            try {
+              const parsedVerdict = JSON.parse(newLog.content || "{}");
+              setVerdict(parsedVerdict);
+            } catch (e) {
+              console.error("Failed to parse boardroom verdict JSON:", e);
+            }
+          } else {
+            setChatFeed((current) => [...current, newLog]);
           }
-        } else {
-          setChatFeed((current) => [...current, newLog]);
         }
-      }).subscribe();
+      ).subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log("Successfully subscribed to agent_logs");
+        }
+      });
 
     const balanceChannel = supabase.channel('live-balance')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'teams' }, (payload: { new: Record<string, unknown> }) => {
@@ -169,6 +200,16 @@ export default function SpectatorDashboard() {
     return `$${(Number(data[0]) / 10**5).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
   };
 
+  const getLogColor = (type?: string) => {
+    switch(type) {
+      case 'FINANCE AGENT': return 'text-green-500';
+      case 'CREATIVE DIRECTOR': return 'text-purple-500';
+      case 'PROJECT MANAGER': return 'text-amber-500';
+      case 'SYSTEM': return 'text-red-500';
+      default: return 'text-blue-500';
+    }
+  };
+
   return (
     <div className={`min-h-screen p-4 font-mono transition-colors duration-1000 ${verdict ? 'bg-red-950 text-red-200' : 'bg-slate-950 text-slate-200'}`}>
 
@@ -180,7 +221,7 @@ export default function SpectatorDashboard() {
             <h1 className="text-5xl font-black text-white tracking-widest mb-2 uppercase drop-shadow-lg">
               {STRINGS.JUDGE.TITLE}
             </h1>
-            <p className="text-xl text-red-300 mb-8 font-bold border-b border-red-800 pb-8">
+            <p className="text-xl text-red-300 mb-8 font-bold border-b border-red-800 pb-8 italic">
               &quot;{verdict.monologue}&quot;
             </p>
             <div className="bg-black/50 p-6 rounded-lg border border-red-800 inline-block">
@@ -191,6 +232,12 @@ export default function SpectatorDashboard() {
               </div>
             </div>
             <p className="mt-6 text-sm text-red-400 italic">Reason: {verdict.reason}</p>
+            <button
+              onClick={() => setVerdict(null)}
+              className="mt-8 px-6 py-2 border border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition-colors uppercase text-xs font-bold"
+            >
+              Return to Boardroom
+            </button>
           </div>
         </div>
       )}
@@ -220,33 +267,11 @@ export default function SpectatorDashboard() {
           <h2 className="text-xl font-bold text-blue-400 flex items-center mb-4"><Users className="mr-2 h-5 w-5" /> {STRINGS.MARKET_DATA}</h2>
 
           <div className="grid grid-cols-1 gap-2 mb-6">
-            <div className="bg-slate-950 rounded-lg p-3 border border-slate-800 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
-                <TrendingUp className="w-8 h-8 text-green-500" />
-              </div>
-              <p className="text-[10px] text-slate-500 mb-0.5 uppercase font-bold tracking-widest">FLR/USD</p>
-              <p className="text-xl font-bold text-white">{mounted ? formatPrice(flrPriceData) : "---"}</p>
-            </div>
-
-            <div className="bg-slate-950 rounded-lg p-3 border border-slate-800 relative overflow-hidden group">
-              <p className="text-[10px] text-slate-500 mb-0.5 uppercase font-bold tracking-widest">XRP/USD</p>
-              <p className="text-xl font-bold text-white">{mounted ? formatPrice(xrpPriceData) : "---"}</p>
-            </div>
-
-            <div className="bg-slate-950 rounded-lg p-3 border border-slate-800 relative overflow-hidden group">
-              <p className="text-[10px] text-slate-500 mb-0.5 uppercase font-bold tracking-widest">BTC/USD</p>
-              <p className="text-xl font-bold text-white">{mounted ? formatPrice(btcPriceData) : "---"}</p>
-            </div>
-
-            <div className="bg-slate-950 rounded-lg p-3 border border-slate-800 relative overflow-hidden group">
-              <p className="text-[10px] text-slate-500 mb-0.5 uppercase font-bold tracking-widest">ETH/USD</p>
-              <p className="text-xl font-bold text-white">{mounted ? formatPrice(ethPriceData) : "---"}</p>
-            </div>
-
-            <div className="bg-slate-950 rounded-lg p-3 border border-slate-800 relative overflow-hidden group">
-              <p className="text-[10px] text-slate-500 mb-0.5 uppercase font-bold tracking-widest">SOM/USD</p>
-              <p className="text-xl font-bold text-white">{mounted ? formatPrice(somPriceData) : "---"}</p>
-            </div>
+            <PriceCard symbol="FLR/USD" data={flrPriceData} format={formatPrice} />
+            <PriceCard symbol="XRP/USD" data={xrpPriceData} format={formatPrice} />
+            <PriceCard symbol="BTC/USD" data={btcPriceData} format={formatPrice} />
+            <PriceCard symbol="ETH/USD" data={ethPriceData} format={formatPrice} />
+            <PriceCard symbol="SOM/USD" data={somPriceData} format={formatPrice} />
           </div>
 
           <h2 className="text-xl font-bold text-blue-400 flex items-center mb-4"><Users className="mr-2 h-5 w-5" /> {STRINGS.TEAM_ALPHA}</h2>
@@ -286,15 +311,17 @@ export default function SpectatorDashboard() {
               <Terminal className="mr-2 h-4 w-4" /> {STRINGS.TERMINAL.HEADER}
             </button>
           </div>
-          <div className="flex-1 p-4 overflow-y-auto space-y-4 flex flex-col">
+          <div ref={scrollRef} className="flex-1 p-4 overflow-y-auto space-y-4 flex flex-col scroll-smooth">
             {chatFeed.length === 0 && dbStatus === 'connected' && (
               <div className="text-center py-10 text-slate-500 italic text-sm">
                 {STRINGS.TERMINAL.WAITING}
               </div>
             )}
             {chatFeed.map((chat, idx) => (
-              <div key={chat.id ?? idx} className="flex flex-col animate-fade-in-up">
-                <span className="text-[10px] mb-1 text-blue-500 uppercase font-black tracking-widest opacity-70">[{chat.log_type}]</span>
+              <div key={chat.id ?? idx} className="flex flex-col animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <span className={`text-[10px] mb-1 uppercase font-black tracking-widest opacity-70 ${getLogColor(chat.log_type)}`}>
+                  [{chat.log_type}]
+                </span>
                 <div className="bg-slate-950/80 backdrop-blur-sm border border-slate-800 rounded-r-lg rounded-bl-lg p-3 text-sm text-slate-300 shadow-sm">
                   {chat.content}
                 </div>
@@ -306,6 +333,18 @@ export default function SpectatorDashboard() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PriceCard({ symbol, data, format }: { symbol: string, data: any, format: any }) {
+  return (
+    <div className="bg-slate-950 rounded-lg p-3 border border-slate-800 relative overflow-hidden group">
+      <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+        <TrendingUp className="w-8 h-8 text-green-500" />
+      </div>
+      <p className="text-[10px] text-slate-500 mb-0.5 uppercase font-bold tracking-widest">{symbol}</p>
+      <p className="text-xl font-bold text-white">{format(data)}</p>
     </div>
   );
 }
