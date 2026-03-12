@@ -3,6 +3,9 @@ FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
+# Optimize npm caching for faster builds
+RUN npm config set cache /app/.npm-cache --global
+
 # Copy package files
 COPY package.json package-lock.json* ./
 RUN npm install
